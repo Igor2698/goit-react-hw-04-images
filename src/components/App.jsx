@@ -1,4 +1,4 @@
-import { Component } from 'react';
+import { useEffect, useState } from 'react';
 
 import 'react-toastify/dist/ReactToastify.css';
 import { ToastContainer, toast } from 'react-toastify';
@@ -20,128 +20,108 @@ const Status = {
   REJECTED: 'rejected',
 };
 
-export class App extends Component {
-  state = {
-    query: '',
-    page: 1,
-    images: [],
-    EndOfImages: false,
-    showModal: false,
-    status: Status.IDLE,
-    error: '',
-    isLoading: false,
-    newImages: '',
-  };
+export const App = () => {
+  const [query, setQuery] = useState('');
+  const [page, setPage] = useState(1);
+  const [images, setImages] = useState([]);
+  const [endOfImages, setEndOfImages] = useState(false);
+  const [showModal, setShowModal] = useState(false);
+  const [status, setStatus] = useState(Status.IDLE);
+  const [error, setError] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [imageForModal, setImageForModal] = useState('');
 
-  async componentDidUpdate(_, prevState) {
-    const prevquery = prevState.query;
-    const nextquery = this.state.query;
-    const { page } = this.state;
+  useEffect(() => {
+    if (query !== '') {
+      async function getImages() {
+        try {
+          setEndOfImages(false);
+          setIsLoading(true);
+          const newImages = await getImage(query, page);
+          setImages(prev => [...prev, ...newImages.hits]);
+          setStatus(Status.RESOLVED);
+          setIsLoading(false);
 
-    if (prevquery !== nextquery || page !== prevState.page) {
-      try {
-        this.setState({ EndOfImages: false, isLoading: true });
+          if (page === 1 && newImages.totalHits > 0) {
+            toast.success(`Cool! We found ${newImages.totalHits} images`);
+          }
 
-        const newImages = await getImage(nextquery, page);
+          const totalPages = Math.ceil(newImages.totalHits / 12);
 
-        this.setState(prevState => ({
-          images: [...prevState.images, ...newImages.hits],
-          status: Status.RESOLVED,
-          isLoading: false,
-          newImages,
-        }));
+          if (
+            (newImages.totalHits !== 0 && newImages.totalHits < 12) ||
+            (totalPages !== 0 && page >= totalPages)
+          ) {
+            toast.warning(
+              `We are sorry but you have reached the end of images`
+            );
+          }
 
-        if (this.state.page === 1 && newImages.totalHits > 0) {
-          toast.success(`Cool! We found ${newImages.totalHits} images`);
+          if (newImages.totalHits < 12 || page >= totalPages) {
+            setEndOfImages(true);
+          }
+
+          if (newImages.totalHits === 0) {
+            toast.warning(`No images found with name ${query}`);
+          }
+        } catch (error) {
+          setError(error);
+          setStatus(Status.REJECTED);
         }
-
-        const totalPages = Math.ceil(newImages.totalHits / 12);
-
-        if (
-          (newImages.totalHits !== 0 && newImages.totalHits < 12) ||
-          (totalPages !== 0 && page >= totalPages)
-        ) {
-          toast.warning(`We are sorry but you have reached the end of images`);
-        }
-
-        if (newImages.totalHits < 12 || page >= totalPages) {
-          this.setState({ EndOfImages: true });
-        }
-
-        if (newImages.totalHits === 0) {
-          toast.warning(`No images found with name ${nextquery}`);
-        }
-      } catch (error) {
-        this.setState({ error, status: Status.REJECTED });
       }
+
+      getImages();
     }
-  }
+  }, [query, page]);
 
-  handleSearchBarSubmit = queryObj => {
-    const query = queryObj.query;
+  const handleSearchBarSubmit = queryObj => {
+    const newQuery = queryObj.query;
 
-    if (query.trim() === '') {
+    if (newQuery.trim() === '') {
       return toast.error('Please enter value of image');
     }
 
-    if (query === this.state.query) {
+    if (newQuery === query) {
       return toast.warning(
         `Meaning: ${query} Has already been found.  Please repeat your request`
       );
     }
-    this.setState({ query, page: 1, images: [] });
+    setQuery(newQuery);
+    setPage(1);
+    setImages([]);
   };
 
-  onLoadMoreClick = () => {
-    this.setState(prevState => ({
-      page: prevState.page + 1,
-    }));
+  const onLoadMoreClick = () => {
+    setPage(prev => prev + 1);
   };
 
-  toggleModal = imageForModal => {
-    this.setState(({ showModal }) => ({
-      showModal: !showModal,
-      imageForModal,
-    }));
+  const toggleModal = imageForModal => {
+    setShowModal(prev => !prev);
+    setImageForModal(imageForModal);
   };
 
-  render() {
-    const {
-      images,
-      showModal,
-      imageForModal,
-      status,
-      error,
-      isLoading,
-      EndOfImages,
-    } = this.state;
+  return (
+    <>
+      <ToastContainer autoClose={3000} />
+      <Section>
+        <SearchBar onSubmit={handleSearchBarSubmit}></SearchBar>
+        {status === 'idle' && <EmptyValue></EmptyValue>}
+      </Section>
 
-    return (
-      <>
-        <ToastContainer autoClose={3000} />
+      {isLoading && <ImagePendingView />}
+
+      {status === 'rejected' && <TextErrorView message={error.message} />}
+
+      {status === 'resolved' && (
         <Section>
-          <SearchBar onSubmit={this.handleSearchBarSubmit}></SearchBar>
-          {status === 'idle' && <EmptyValue></EmptyValue>}
+          <ImageGallery onImgClick={toggleModal} images={images} />
+
+          {showModal && (
+            <Modal onClose={toggleModal} image={imageForModal}></Modal>
+          )}
+          {!endOfImages && <Button onClick={onLoadMoreClick}></Button>}
         </Section>
-
-        {isLoading && <ImagePendingView />}
-
-        {status === 'rejected' && <TextErrorView message={error.message} />}
-
-        {status === 'resolved' && (
-          <Section>
-            <ImageGallery
-              onImgClick={this.toggleModal}
-              images={images}
-            ></ImageGallery>
-
-            {showModal && (
-              <Modal onClose={this.toggleModal} image={imageForModal}></Modal>
-            )}
-            {!EndOfImages && <Button onClick={this.onLoadMoreClick}></Button>}
-          </Section>
-        )}
-      </>
-    );
-  }
-}
+      )}
+    </>
+  );
+};

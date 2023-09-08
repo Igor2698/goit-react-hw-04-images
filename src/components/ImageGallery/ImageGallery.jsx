@@ -10,7 +10,7 @@ const ImageGallery = ({ onImgClick, images }) => {
       <ImageGalleryItem
         images={images}
         onClick={largeImageURL => onImgClick(largeImageURL)}
-      ></ImageGalleryItem>
+      />
     </ul>
   );
 };
